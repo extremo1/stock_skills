@@ -1,0 +1,6 @@
+data/cache/
+data/watchlists/
+data/screening_results/
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,128 @@
+"""Financial indicators and value-score calculation."""
+
+from typing import Optional
+
+
+def is_undervalued_per(per: Optional[float], threshold: float = 15.0) -> bool:
+    """Return True if PER indicates undervaluation (0 < per < threshold)."""
+    if per is None:
+        return False
+    return 0 < per < threshold
+
+
+def is_undervalued_pbr(pbr: Optional[float], threshold: float = 1.0) -> bool:
+    """Return True if PBR indicates undervaluation (0 < pbr < threshold)."""
+    if pbr is None:
+        return False
+    return 0 < pbr < threshold
+
+
+def has_good_dividend(dividend_yield: Optional[float], min_yield: float = 0.03) -> bool:
+    """Return True if dividend yield meets the minimum threshold."""
+    if dividend_yield is None:
+        return False
+    return dividend_yield >= min_yield
+
+
+def has_good_roe(roe: Optional[float], min_roe: float = 0.08) -> bool:
+    """Return True if ROE meets the minimum threshold."""
+    if roe is None:
+        return False
+    return roe >= min_roe
+
+
+def _score_per(per: Optional[float], per_max: float) -> float:
+    """PER score (25 points max). Lower PER = higher score."""
+    if per is None or per <= 0:
+        return 0.0
+    if per >= per_max * 2:
+        return 0.0
+    # Linear: PER == 0 -> 25, PER == per_max*2 -> 0
+    score = max(0.0, 25.0 * (1.0 - per / (per_max * 2)))
+    return round(score, 2)
+
+
+def _score_pbr(pbr: Optional[float], pbr_max: float) -> float:
+    """PBR score (25 points max). Lower PBR = higher score."""
+    if pbr is None or pbr <= 0:
+        return 0.0
+    if pbr >= pbr_max * 2:
+        return 0.0
+    score = max(0.0, 25.0 * (1.0 - pbr / (pbr_max * 2)))
+    return round(score, 2)
+
+
+def _score_dividend(dividend_yield: Optional[float], div_min: float) -> float:
+    """Dividend yield score (20 points max). Higher yield = higher score."""
+    if dividend_yield is None or dividend_yield <= 0:
+        return 0.0
+    # Cap at div_min * 3 for max score
+    cap = div_min * 3
+    ratio = min(dividend_yield / cap, 1.0)
+    return round(20.0 * ratio, 2)
+
+
+def _score_roe(roe: Optional[float], roe_min: float) -> float:
+    """ROE score (15 points max). Higher ROE = higher score."""
+    if roe is None or roe <= 0:
+        return 0.0
+    # Cap at roe_min * 3 for max score
+    cap = roe_min * 3
+    ratio = min(roe / cap, 1.0)
+    return round(15.0 * ratio, 2)
+
+
+def _score_growth(revenue_growth: Optional[float]) -> float:
+    """Revenue growth score (15 points max). Higher growth = higher score."""
+    if revenue_growth is None:
+        return 0.0
+    if revenue_growth <= 0:
+        return 0.0
+    # Cap at 30% growth for max score
+    cap = 0.30
+    ratio = min(revenue_growth / cap, 1.0)
+    return round(15.0 * ratio, 2)
+
+
+def calculate_value_score(stock_data: dict, thresholds: Optional[dict] = None) -> float:
+    """Calculate a composite value score (0-100) for a stock.
+
+    Breakdown:
+      - PER undervaluation:  25 points
+      - PBR undervaluation:  25 points
+      - Dividend yield:      20 points
+      - ROE:                 15 points
+      - Revenue growth:      15 points
+
+    Parameters
+    ----------
+    stock_data : dict
+        Keys: 'trailingPE' (or 'per'), 'priceToBook' (or 'pbr'),
+              'dividendYield' (or 'dividend_yield'),
+              'returnOnEquity' (or 'roe'), 'revenueGrowth' (or 'revenue_growth').
+    thresholds : dict, optional
+        Keys: 'per_max', 'pbr_max', 'dividend_yield_min', 'roe_min'.
+    """
+    if thresholds is None:
+        thresholds = {}
+
+    per_max = thresholds.get("per_max", 15.0)
+    pbr_max = thresholds.get("pbr_max", 1.0)
+    div_min = thresholds.get("dividend_yield_min", 0.03)
+    roe_min = thresholds.get("roe_min", 0.08)
+
+    # Support both yahoo raw keys and our normalised keys
+    per = stock_data.get("trailingPE") or stock_data.get("per")
+    pbr = stock_data.get("priceToBook") or stock_data.get("pbr")
+    div_yield = stock_data.get("dividendYield") or stock_data.get("dividend_yield")
+    roe = stock_data.get("returnOnEquity") or stock_data.get("roe")
+    growth = stock_data.get("revenueGrowth") or stock_data.get("revenue_growth")
+
+    total = (
+        _score_per(per, per_max)
+        + _score_pbr(pbr, pbr_max)
+        + _score_dividend(div_yield, div_min)
+        + _score_roe(roe, roe_min)
+        + _score_growth(growth)
+    )
+    return round(min(total, 100.0), 2)
